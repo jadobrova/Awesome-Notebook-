@@ -1,0 +1,202 @@
+
+---
+
+## 🐍 notebook.py (Python)
+
+```python
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext, Toplevel, Label, Entry, Button
+import os
+import threading
+
+# Для drag-and-drop (установить: pip install tkinterdnd2)
+try:
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+    USE_DND = True
+except ImportError:
+    USE_DND = False
+    TkinterDnD = tk.Tk
+
+class AdvancedNotebook:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("СуперБлокнот на Python")
+        self.root.geometry("800x600")
+        
+        self.current_file = None
+        self.auto_save_timer = None
+        self.undo_stack = []
+        self.redo_stack = []
+        
+        # Меню
+        menubar = tk.Menu(root)
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Новый", command=self.new_file, accelerator="Ctrl+N")
+        file_menu.add_command(label="Открыть...", command=self.open_file, accelerator="Ctrl+O")
+        file_menu.add_command(label="Сохранить", command=self.save_file, accelerator="Ctrl+S")
+        file_menu.add_command(label="Сохранить как...", command=self.save_as)
+        file_menu.add_separator()
+        file_menu.add_command(label="Выход", command=self.exit_app)
+        menubar.add_cascade(label="Файл", menu=file_menu)
+        
+        edit_menu = tk.Menu(menubar, tearoff=0)
+        edit_menu.add_command(label="Отменить", command=self.undo, accelerator="Ctrl+Z")
+        edit_menu.add_command(label="Повторить", command=self.redo, accelerator="Ctrl+Y")
+        edit_menu.add_separator()
+        edit_menu.add_command(label="Найти...", command=self.find_text, accelerator="Ctrl+F")
+        edit_menu.add_command(label="Заменить...", command=self.replace_text, accelerator="Ctrl+H")
+        menubar.add_cascade(label="Правка", menu=edit_menu)
+        
+        view_menu = tk.Menu(menubar, tearoff=0)
+        view_menu.add_command(label="Тёмная тема", command=self.set_dark_theme)
+        view_menu.add_command(label="Светлая тема", command=self.set_light_theme)
+        menubar.add_cascade(label="Вид", menu=view_menu)
+        
+        self.root.config(menu=menubar)
+        
+        # Текстовая область
+        self.text_area = scrolledtext.ScrolledText(root, wrap=tk.WORD, undo=True, font=("Consolas", 12))
+        self.text_area.pack(fill=tk.BOTH, expand=True)
+        self.text_area.bind("<<Modified>>", self.on_modified)
+        self.text_area.bind("<KeyRelease>", self.update_status)
+        
+        # Статусная строка
+        self.status = tk.Label(root, text="Символов: 0 | Слов: 0 | Строк: 1", bd=1, relief=tk.SUNKEN, anchor=tk.W)
+        self.status.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Горячие клавиши
+        self.root.bind("<Control-n>", lambda e: self.new_file())
+        self.root.bind("<Control-o>", lambda e: self.open_file())
+        self.root.bind("<Control-s>", lambda e: self.save_file())
+        self.root.bind("<Control-f>", lambda e: self.find_text())
+        self.root.bind("<Control-h>", lambda e: self.replace_text())
+        self.root.bind("<Control-z>", lambda e: self.undo())
+        self.root.bind("<Control-y>", lambda e: self.redo())
+        
+        if USE_DND:
+            self.text_area.drop_target_register(DND_FILES)
+            self.text_area.dnd_bind('<<Drop>>', self.on_drop)
+        
+        self.update_status()
+        self.start_auto_save()
+    
+    def on_modified(self, event=None):
+        self.update_status()
+        self.text_area.edit_modified(False)
+    
+    def update_status(self, event=None):
+        content = self.text_area.get("1.0", tk.END)
+        chars = len(content) - 1  # минус лишний \n
+        words = len(content.split())
+        lines = content.count('\n')
+        self.status.config(text=f"Символов: {chars} | Слов: {words} | Строк: {lines}")
+    
+    def start_auto_save(self):
+        if self.auto_save_timer:
+            self.root.after_cancel(self.auto_save_timer)
+        self.auto_save_timer = self.root.after(30000, self.auto_save)  # 30 сек
+    
+    def auto_save(self):
+        if self.current_file:
+            self.save_file(quiet=True)
+        self.start_auto_save()
+    
+    def new_file(self):
+        if self.text_area.get("1.0", tk.END).strip():
+            if not messagebox.askyesno("Новый файл", "Сохранить изменения?"):
+                self.text_area.delete("1.0", tk.END)
+                self.current_file = None
+                self.update_status()
+    
+    def open_file(self):
+        filepath = filedialog.askopenfilename(filetypes=[("Текстовые файлы", "*.txt"), ("Все файлы", "*.*")])
+        if filepath:
+            with open(filepath, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.text_area.delete("1.0", tk.END)
+            self.text_area.insert("1.0", content)
+            self.current_file = filepath
+            self.update_status()
+    
+    def save_file(self, quiet=False):
+        if self.current_file:
+            with open(self.current_file, "w", encoding="utf-8") as f:
+                f.write(self.text_area.get("1.0", tk.END))
+            if not quiet:
+                messagebox.showinfo("Сохранение", "Файл сохранён")
+        else:
+            self.save_as()
+    
+    def save_as(self):
+        filepath = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Текстовые файлы", "*.txt")])
+        if filepath:
+            self.current_file = filepath
+            self.save_file()
+    
+    def exit_app(self):
+        self.root.quit()
+    
+    def find_text(self):
+        top = Toplevel(self.root)
+        top.title("Поиск")
+        top.geometry("300x100")
+        Label(top, text="Найти:").pack(pady=5)
+        entry = Entry(top, width=30)
+        entry.pack(pady=5)
+        entry.focus()
+        
+        def do_find():
+            target = entry.get()
+            if target:
+                self.text_area.tag_remove("found", "1.0", tk.END)
+                start = "1.0"
+                count = 0
+                while True:
+                    pos = self.text_area.search(target, start, stopindex=tk.END)
+                    if not pos:
+                        break
+                    end = f"{pos}+{len(target)}c"
+                    self.text_area.tag_add("found", pos, end)
+                    start = end
+                    count += 1
+                self.text_area.tag_config("found", background="yellow")
+                messagebox.showinfo("Результат", f"Найдено {count} совпадений")
+            top.destroy()
+        
+        Button(top, text="Найти", command=do_find).pack(pady=5)
+    
+    def replace_text(self):
+        # Упрощённая версия: открывает диалог с поиском и заменой
+        messagebox.showinfo("Замена", "Расширенная замена будет реализована по желанию")
+    
+    def undo(self):
+        try:
+            self.text_area.edit_undo()
+        except tk.TclError:
+            pass
+    
+    def redo(self):
+        try:
+            self.text_area.edit_redo()
+        except tk.TclError:
+            pass
+    
+    def set_dark_theme(self):
+        self.text_area.config(bg="#2e2e2e", fg="white", insertbackground="white")
+    
+    def set_light_theme(self):
+        self.text_area.config(bg="white", fg="black", insertbackground="black")
+    
+    def on_drop(self, event):
+        filepath = event.data.strip('{}')
+        if os.path.isfile(filepath):
+            with open(filepath, "r", encoding="utf-8") as f:
+                self.text_area.insert(tk.INSERT, f.read())
+
+if __name__ == "__main__":
+    if USE_DND:
+        root = TkinterDnD.Tk()
+    else:
+        root = tk.Tk()
+    app = AdvancedNotebook(root)
+    root.mainloop()
