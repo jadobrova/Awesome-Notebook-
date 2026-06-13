@@ -1,0 +1,154 @@
+using System;
+using System.IO;
+using System.Windows.Forms;
+
+namespace SuperNotepad
+{
+    public partial class MainForm : Form
+    {
+        private TextBox textBox;
+        private StatusStrip statusStrip;
+        private ToolStripStatusLabel statusLabel;
+        private string currentFile = null;
+        private Timer autoSaveTimer;
+
+        public MainForm()
+        {
+            InitializeComponent();
+            SetupUI();
+            SetupEvents();
+            StartAutoSave();
+        }
+
+        private void SetupUI()
+        {
+            this.Text = "C# Блокнот с фичами";
+            this.Size = new System.Drawing.Size(1000, 700);
+
+            textBox = new TextBox()
+            {
+                Multiline = true,
+                Dock = DockStyle.Fill,
+                ScrollBars = ScrollBars.Both,
+                Font = new System.Drawing.Font("Consolas", 12),
+                WordWrap = true
+            };
+            this.Controls.Add(textBox);
+
+            var menu = new MenuStrip();
+            var fileMenu = new ToolStripMenuItem("Файл");
+            fileMenu.DropDownItems.Add("Новый", null, (s, e) => NewFile());
+            fileMenu.DropDownItems.Add("Открыть...", null, (s, e) => OpenFile());
+            fileMenu.DropDownItems.Add("Сохранить", null, (s, e) => SaveFile());
+            fileMenu.DropDownItems.Add("Сохранить как...", null, (s, e) => SaveAs());
+            fileMenu.DropDownItems.Add(new ToolStripSeparator());
+            fileMenu.DropDownItems.Add("Выход", null, (s, e) => Application.Exit());
+            menu.Items.Add(fileMenu);
+
+            var editMenu = new ToolStripMenuItem("Правка");
+            editMenu.DropDownItems.Add("Поиск", null, (s, e) => ShowFindDialog());
+            editMenu.DropDownItems.Add("Замена", null, (s, e) => ShowReplaceDialog());
+            menu.Items.Add(editMenu);
+
+            this.MainMenuStrip = menu;
+            this.Controls.Add(menu);
+
+            statusStrip = new StatusStrip();
+            statusLabel = new ToolStripStatusLabel("Символов: 0 | Слов: 0");
+            statusStrip.Items.Add(statusLabel);
+            this.Controls.Add(statusStrip);
+        }
+
+        private void SetupEvents()
+        {
+            textBox.TextChanged += (s, e) => UpdateStatus();
+        }
+
+        private void UpdateStatus()
+        {
+            string text = textBox.Text;
+            int chars = text.Length;
+            int words = string.IsNullOrWhiteSpace(text) ? 0 : text.Split(new[] { ' ', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+            statusLabel.Text = $" Символов: {chars} | Слов: {words}";
+        }
+
+        private void StartAutoSave()
+        {
+            autoSaveTimer = new Timer { Interval = 30000 };
+            autoSaveTimer.Tick += (s, e) => { if (!string.IsNullOrEmpty(currentFile)) SaveToFile(currentFile); };
+            autoSaveTimer.Start();
+        }
+
+        private void NewFile()
+        {
+            if (!string.IsNullOrEmpty(textBox.Text) && MessageBox.Show("Сохранить изменения?", "Новый", MessageBoxButtons.YesNo) == DialogResult.Yes)
+                SaveFile();
+            textBox.Clear();
+            currentFile = null;
+        }
+
+        private void OpenFile()
+        {
+            using (var ofd = new OpenFileDialog() { Filter = "Текстовые файлы|*.txt|Все файлы|*.*" })
+            {
+                if (ofd.ShowDialog() == DialogResult.OK)
+                {
+                    textBox.Text = File.ReadAllText(ofd.FileName);
+                    currentFile = ofd.FileName;
+                }
+            }
+        }
+
+        private void SaveFile()
+        {
+            if (string.IsNullOrEmpty(currentFile)) SaveAs();
+            else SaveToFile(currentFile);
+        }
+
+        private void SaveAs()
+        {
+            using (var sfd = new SaveFileDialog() { Filter = "Текстовые файлы|*.txt" })
+            {
+                if (sfd.ShowDialog() == DialogResult.OK)
+                {
+                    currentFile = sfd.FileName;
+                    SaveToFile(currentFile);
+                }
+            }
+        }
+
+        private void SaveToFile(string path)
+        {
+            File.WriteAllText(path, textBox.Text);
+            statusLabel.Text = $"Сохранено в {Path.GetFileName(path)} | " + statusLabel.Text;
+        }
+
+        private void ShowFindDialog()
+        {
+            string search = Microsoft.VisualBasic.Interaction.InputBox("Введите текст для поиска:", "Поиск", "");
+            if (!string.IsNullOrEmpty(search))
+            {
+                int index = textBox.Text.IndexOf(search, StringComparison.OrdinalIgnoreCase);
+                if (index >= 0)
+                {
+                    textBox.Select(index, search.Length);
+                    textBox.ScrollToCaret();
+                }
+                else MessageBox.Show("Не найдено");
+            }
+        }
+
+        private void ShowReplaceDialog()
+        {
+            // упрощённо
+            MessageBox.Show("Расширенная замена доступна в следующей версии");
+        }
+
+        [STAThread]
+        static void Main()
+        {
+            Application.EnableVisualStyles();
+            Application.Run(new MainForm());
+        }
+    }
+}
