@@ -28,3 +28,5 @@
 ```bash
 pip install tkinterdnd2
 python notebook.py
+php -S localhost:8000
+# Открыть http://localhost:8000/notebook.php?file=example.txt
