@@ -1,0 +1,140 @@
+import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.undo.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.*;
+
+public class AdvancedNotebook extends JFrame {
+    private JTextArea textArea;
+    private JLabel statusBar;
+    private File currentFile;
+    private UndoManager undoManager = new UndoManager();
+    private Timer autoSaveTimer;
+
+    public AdvancedNotebook() {
+        setTitle("Java Блокнот PRO");
+        setSize(900, 700);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+
+        textArea = new JTextArea();
+        textArea.setFont(new Font("Monospaced", Font.PLAIN, 14));
+        textArea.getDocument().addUndoableEditListener(e -> undoManager.addEdit(e.getEdit()));
+        JScrollPane scroll = new JScrollPane(textArea);
+        add(scroll, BorderLayout.CENTER);
+
+        statusBar = new JLabel(" Символов: 0 | Слов: 0 | Строк: 1");
+        statusBar.setBorder(BorderFactory.createEtchedBorder());
+        add(statusBar, BorderLayout.SOUTH);
+
+        createMenuBar();
+        setupShortcuts();
+        startAutoSave();
+
+        textArea.addKeyListener(new KeyAdapter() {
+            public void keyReleased(KeyEvent e) { updateStatus(); }
+        });
+        updateStatus();
+    }
+
+    private void createMenuBar() {
+        JMenuBar bar = new JMenuBar();
+        JMenu fileMenu = new JMenu("Файл");
+        JMenuItem newItem = new JMenuItem("Новый", KeyEvent.VK_N);
+        newItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, InputEvent.CTRL_DOWN_MASK));
+        newItem.addActionListener(e -> newFile());
+        JMenuItem openItem = new JMenuItem("Открыть...");
+        openItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
+        openItem.addActionListener(e -> openFile());
+        JMenuItem saveItem = new JMenuItem("Сохранить");
+        saveItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK));
+        saveItem.addActionListener(e -> saveFile());
+        JMenuItem exitItem = new JMenuItem("Выход");
+        exitItem.addActionListener(e -> System.exit(0));
+        fileMenu.add(newItem); fileMenu.add(openItem); fileMenu.add(saveItem); fileMenu.addSeparator(); fileMenu.add(exitItem);
+
+        JMenu editMenu = new JMenu("Правка");
+        JMenuItem undoItem = new JMenuItem("Отменить");
+        undoItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK));
+        undoItem.addActionListener(e -> { if(undoManager.canUndo()) undoManager.undo(); });
+        JMenuItem redoItem = new JMenuItem("Повторить");
+        redoItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.CTRL_DOWN_MASK));
+        redoItem.addActionListener(e -> { if(undoManager.canRedo()) undoManager.redo(); });
+        editMenu.add(undoItem); editMenu.add(redoItem);
+
+        bar.add(fileMenu); bar.add(editMenu);
+        setJMenuBar(bar);
+    }
+
+    private void setupShortcuts() {
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK), "find");
+        textArea.getActionMap().put("find", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) { showFindDialog(); }
+        });
+    }
+
+    private void showFindDialog() {
+        String find = JOptionPane.showInputDialog(this, "Поиск:");
+        if(find != null && !find.isEmpty()) {
+            String content = textArea.getText();
+            int pos = content.indexOf(find);
+            if(pos >= 0) {
+                textArea.select(pos, pos + find.length());
+                textArea.requestFocus();
+            } else JOptionPane.showMessageDialog(this, "Не найдено");
+        }
+    }
+
+    private void updateStatus() {
+        String text = textArea.getText();
+        int chars = text.length();
+        int words = text.trim().isEmpty() ? 0 : text.trim().split("\\s+").length;
+        int lines = text.split("\n", -1).length;
+        statusBar.setText(String.format(" Символов: %d | Слов: %d | Строк: %d", chars, words, lines));
+    }
+
+    private void startAutoSave() {
+        autoSaveTimer = new Timer(30000, e -> { if(currentFile != null) saveFile(); });
+        autoSaveTimer.start();
+    }
+
+    private void newFile() {
+        if(!textArea.getText().isEmpty()) {
+            int res = JOptionPane.showConfirmDialog(this, "Сохранить изменения?", "Новый файл", JOptionPane.YES_NO_CANCEL_OPTION);
+            if(res == JOptionPane.YES_OPTION) saveFile();
+            if(res == JOptionPane.CANCEL_OPTION) return;
+        }
+        textArea.setText("");
+        currentFile = null;
+        updateStatus();
+    }
+
+    private void openFile() {
+        JFileChooser fc = new JFileChooser();
+        fc.setFileFilter(new FileNameExtensionFilter("Текстовые файлы", "txt"));
+        if(fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            try(BufferedReader br = new BufferedReader(new FileReader(fc.getSelectedFile()))) {
+                textArea.read(br, null);
+                currentFile = fc.getSelectedFile();
+                updateStatus();
+            } catch(IOException ex) { JOptionPane.showMessageDialog(this, "Ошибка чтения"); }
+        }
+    }
+
+    private void saveFile() {
+        if(currentFile == null) {
+            JFileChooser fc = new JFileChooser();
+            if(fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION)
+                currentFile = fc.getSelectedFile();
+            else return;
+        }
+        try(BufferedWriter bw = new BufferedWriter(new FileWriter(currentFile))) {
+            textArea.write(bw);
+        } catch(IOException ex) { JOptionPane.showMessageDialog(this, "Ошибка сохранения"); }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new AdvancedNotebook().setVisible(true));
+    }
+}
