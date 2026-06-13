@@ -1,0 +1,57 @@
+// Требует добавления зависимостей в Cargo.toml:
+// [dependencies]
+// rocket = "0.5.0"
+// rocket_dyn_templates = { version = "0.1.0", features = ["handlebars"] }
+// serde = { version = "1.0", features = ["derive"] }
+
+#![feature(proc_macro_hygiene, decl_macro)]
+
+#[macro_use] extern crate rocket;
+use rocket::fs::{NamedFile, relative};
+use rocket::form::Form;
+use rocket::response::content::RawHtml;
+use rocket_dyn_templates::{Template, context};
+use serde::{Serialize, Deserialize};
+use std::fs;
+use std::path::PathBuf;
+
+#[derive(FromForm)]
+struct SaveData {
+    content: String,
+    filename: String,
+}
+
+#[get("/")]
+async fn index() -> Template {
+    Template::render("index", context! {})
+}
+
+#[get("/load?<file>")]
+async fn load(file: String) -> RawHtml<String> {
+    let path = PathBuf::from(&file);
+    if path.exists() && path.is_file() {
+        let content = fs::read_to_string(&path).unwrap_or_default();
+        RawHtml(content)
+    } else {
+        RawHtml("".into())
+    }
+}
+
+#[post("/save", data = "<data>")]
+async fn save(data: Form<SaveData>) -> &'static str {
+    let filename = &data.filename;
+    let content = &data.content;
+    if !filename.is_empty() {
+        let _ = fs::write(filename, content);
+        "ok"
+    } else {
+        "error"
+    }
+}
+
+#[launch]
+fn rocket() -> _ {
+    rocket::build()
+        .attach(Template::fairing())
+        .mount("/", routes![index, load, save])
+}
