@@ -1,0 +1,28 @@
+Запуск и проверка
+Python: установить tkinterdnd2 (опционально) и запустить python notebook.py
+
+Rust: создать новый проект, скопировать notebook.rs и templates/index.hbs, добавить зависимости, запустить cargo run
+
+Go: go mod init notebook && go run notebook.go
+
+Java: javac AdvancedNotebook.java && java AdvancedNotebook
+
+C#: создать проект Windows Forms, заменить код в Form1.cs
+
+HTML: просто дважды кликнуть по файлу
+
+PHP: php -S localhost:8000 и открыть http://localhost:8000/notebook.php
+
+Каждая версия поддерживает:
+
+Открытие/сохранение (локальное или через веб)
+
+Автосохранение (2–30 секунд)
+
+Поиск / подсветку
+
+Подсчёт символов, слов
+
+Горячие клавиши (везде, где применимо)
+
+Смену темы (в большинстве)
