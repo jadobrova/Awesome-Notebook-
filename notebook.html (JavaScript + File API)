@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>JS Блокнот (офлайн)</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #2c2c2c; color: #f0f0f0; display: flex; flex-direction: column; height: 100vh; }
+        .toolbar { background: #3c3c3c; padding: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        button, .file-input-label { background: #0e639c; border: none; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        button:hover, .file-input-label:hover { background: #1177bb; }
+        input { background: #1e1e1e; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; }
+        textarea { flex: 1; background: #1e1e1e; color: #d4d4d4; font-family: 'Courier New', monospace; font-size: 14px; padding: 12px; border: none; resize: none; outline: none; }
+        .status { background: #007acc; padding: 5px 12px; font-size: 12px; display: flex; justify-content: space-between; }
+        .dark-btn { background: #555; }
+        .dark-btn.active { background: #4caf50; }
+    </style>
+</head>
+<body>
+<div class="toolbar">
+    <input type="text" id="filename" placeholder="имя_файла.txt" size="30">
+    <button id="openBtn">📂 Открыть</button>
+    <button id="saveBtn">💾 Сохранить</button>
+    <button id="newBtn">📄 Новый</button>
+    <button id="findBtn">🔍 Найти</button>
+    <label class="file-input-label">
+        📎 Загрузить
+        <input type="file" id="fileInput" style="display: none;" accept=".txt">
+    </label>
+    <button id="themeBtn">🌙 Тёмная/Светлая</button>
+</div>
+<textarea id="editor" placeholder="Введите текст..."></textarea>
+<div class="status">
+    <span id="stats">Символов: 0 | Слов: 0</span>
+    <span id="autoSaveStatus"></span>
+</div>
+
+<script>
+    const editor = document.getElementById('editor');
+    const filenameInput = document.getElementById('filename');
+    const statsSpan = document.getElementById('stats');
+    const autoSaveSpan = document.getElementById('autoSaveStatus');
+    let currentFileHandle = null;
+    let autoSaveTimer = null;
+
+    function updateStats() {
+        const text = editor.value;
+        const chars = text.length;
+        const words = text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
+        statsSpan.innerText = `Символов: ${chars} | Слов: ${words}`;
+    }
+
+    function triggerAutoSave() {
+        if(autoSaveTimer) clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => {
+            if(filenameInput.value.trim() !== "") {
+                const content = editor.value;
+                const filename = filenameInput.value;
+                // Используем File System Access API, если доступен, иначе — загрузка через ссылку
+                if ('showSaveFilePicker' in window && currentFileHandle) {
+                    saveWithFileAPI();
+                } else {
+                    downloadFile(filename, content);
+                    autoSaveSpan.innerText = `Автосохранено в ${filename} (${new Date().toLocaleTimeString()})`;
+                    setTimeout(() => autoSaveSpan.innerText = '', 2000);
+                }
+            }
+        }, 2000);
+    }
+
+    async function saveWithFileAPI() {
+        if (!currentFileHandle) {
+            if ('showSaveFilePicker' in window) {
+                try {
+                    currentFileHandle = await window.showSaveFilePicker({
+                        suggestedName: filenameInput.value || "document.txt",
+                        types: [{ description: 'Текстовые файлы', accept: { 'text/plain': ['.txt'] } }]
+                    });
+                } catch(e) { return; }
+            } else { downloadFile(filenameInput.value, editor.value); return; }
+        }
+        const writable = await currentFileHandle.createWritable();
+        await writable.write(editor.value);
+        await writable.close();
+        autoSaveSpan.innerText = `Сохранено в ${currentFileHandle.name}`;
+        setTimeout(() => autoSaveSpan.innerText = '', 2000);
+    }
+
+    async function openFileWithAPI() {
+        if ('showOpenFilePicker' in window) {
+            const [handle] = await window.showOpenFilePicker({ types: [{ description: 'Text', accept: { 'text/plain': ['.txt'] } }] });
+            currentFileHandle = handle;
+            const file = await handle.getFile();
+            const text = await file.text();
+            editor.value = text;
+            filenameInput.value = file.name;
+            updateStats();
+        } else {
+            document.getElementById('fileInput').click();
+        }
+    }
+
+    function downloadFile(filename, content) {
+        const blob = new Blob([content], {type: 'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename || 'notepad.txt';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    document.getElementById('openBtn').addEventListener('click', openFileWithAPI);
+    document.getElementById('saveBtn').addEventListener('click', () => {
+        if (currentFileHandle) saveWithFileAPI();
+        else if(filenameInput.value) downloadFile(filenameInput.value, editor.value);
+        else alert('Укажите имя файла');
+    });
+    document.getElementById('newBtn').addEventListener('click', () => {
+        if(editor.value.trim() && confirm('Очистить?')) editor.value = '';
+        currentFileHandle = null;
+        filenameInput.value = '';
+        updateStats();
+    });
+    document.getElementById('findBtn').addEventListener('click', () => {
+        const search = prompt('Найти:');
+        if(search) {
+            const idx = editor.value.indexOf(search);
+            if(idx !== -1) {
+                editor.focus();
+                editor.setSelectionRange(idx, idx+search.length);
+            } else alert('Не найдено');
+        }
+    });
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if(file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => { editor.value = ev.target.result; filenameInput.value = file.name; updateStats(); };
+            reader.readAsText(file, 'UTF-8');
+        }
+    });
+    let dark = true;
+    document.getElementById('themeBtn').addEventListener('click', () => {
+        dark = !dark;
+        document.body.style.backgroundColor = dark ? '#2c2c2c' : '#f5f5f5';
+        document.body.style.color = dark ? '#f0f0f0' : '#222';
+        document.querySelector('.toolbar').style.backgroundColor = dark ? '#3c3c3c' : '#ddd';
+        editor.style.backgroundColor = dark ? '#1e1e1e' : 'white';
+        editor.style.color = dark ? '#d4d4d4' : 'black';
+    });
+    editor.addEventListener('input', () => { updateStats(); triggerAutoSave(); });
+    updateStats();
+</script>
+</body>
+</html>
